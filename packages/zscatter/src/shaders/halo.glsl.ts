@@ -29,7 +29,7 @@ void main() {
   if (dist <= 0.27777) {
     discard;
   }
-  float alpha = pow(smoothstep(0.5, 0.27777, dist), 4.0);
+  float alpha = pow(smoothstep(0.5, 0.27777, dist), 3.0);
   if (alpha <= 0.001) {
     discard;
   }

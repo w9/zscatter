@@ -66,7 +66,7 @@ export function ZScatter({
   onClick,
   renderLoading
 }: ZScatterProps) {
-  const { gl, size, camera } = useThree();
+  const { gl, size, camera, invalidate } = useThree();
   const geometry = useMemo(() => new THREE.BufferGeometry(), []);
   const pointsRef = useRef<THREE.Points | null>(null);
   const pickingScene = useMemo(() => new THREE.Scene(), []);
@@ -304,8 +304,9 @@ export function ZScatter({
       applyAttributes(needsResize);
       needsResortRef.current = true;
       setIsLoading(false);
+      invalidate();
     },
-    [applyAttributes]
+    [applyAttributes, invalidate]
   );
 
   useEffect(() => {
@@ -333,7 +334,8 @@ export function ZScatter({
     applyAttributes(true);
     needsResortRef.current = true;
     setIsLoading(false);
-  }, [applyAttributes, data]);
+    invalidate();
+  }, [applyAttributes, data, invalidate]);
 
   useEffect(() => {
     const pickingPoints = new THREE.Points(geometry, pickingMaterial);
@@ -450,6 +452,7 @@ export function ZScatter({
       if (onHover) {
         onHover({ id });
       }
+      invalidate();
     };
     const handleClick = (event: PointerEvent) => {
       if (!onClick) {
@@ -467,6 +470,7 @@ export function ZScatter({
       if (onHover) {
         onHover({ id: null });
       }
+      invalidate();
     };
     canvas.addEventListener("pointermove", handleMove);
     canvas.addEventListener("pointerdown", handleClick);

@@ -1,5 +1,5 @@
-import React, { useRef } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import React, { useCallback, useEffect, useRef } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
 import { ZScatter, ZScatterChunk, ZScatterPickEvent } from "./ZScatter";
 
 export type ZScatterSceneProps = {
@@ -14,12 +14,12 @@ export type ZScatterSceneProps = {
 };
 
 function DragRotateControls() {
-  const { camera, gl } = useThree();
+  const { camera, gl, invalidate } = useThree();
   const draggingRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
   const rotationRef = useRef({ yaw: 0, pitch: 0 });
 
-  useFrame(() => {
+  const updateCamera = useCallback(() => {
     const radius = camera.position.length();
     const clampedPitch = Math.max(-1.4, Math.min(1.4, rotationRef.current.pitch));
     const yaw = rotationRef.current.yaw;
@@ -28,9 +28,9 @@ function DragRotateControls() {
     const z = radius * Math.cos(clampedPitch) * Math.cos(yaw);
     camera.position.set(x, y, z);
     camera.lookAt(0, 0, 0);
-  });
+  }, [camera]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const element = gl.domElement;
     const handleDown = (event: PointerEvent) => {
       draggingRef.current = true;
@@ -52,6 +52,8 @@ function DragRotateControls() {
       const rotationSpeed = 0.005;
       rotationRef.current.yaw -= deltaX * rotationSpeed;
       rotationRef.current.pitch += deltaY * rotationSpeed;
+      updateCamera();
+      invalidate();
     };
     element.addEventListener("pointerdown", handleDown);
     element.addEventListener("pointerup", handleUp);
@@ -63,7 +65,7 @@ function DragRotateControls() {
       element.removeEventListener("pointerleave", handleUp);
       element.removeEventListener("pointermove", handleMove);
     };
-  }, [gl.domElement]);
+  }, [gl.domElement, invalidate, updateCamera]);
 
   return null;
 }
@@ -79,7 +81,7 @@ export function ZScatterScene({
   children
 }: ZScatterSceneProps) {
   return (
-    <Canvas camera={{ position: cameraPosition, fov: cameraFov }}>
+    <Canvas camera={{ position: cameraPosition, fov: cameraFov }} frameloop="demand">
       <DragRotateControls />
       <ambientLight intensity={ambientIntensity} />
       <ZScatter
