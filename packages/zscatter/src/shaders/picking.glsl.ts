@@ -3,14 +3,21 @@ attribute float aId;
 
 uniform float uSize;
 uniform float uPixelRatio;
+uniform float uMaxPointSize;
 
 varying float vId;
 
 void main() {
   vId = aId;
   vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  float size = uSize * uPixelRatio / max(0.0001, -mvPosition.z);
+  if (size > uMaxPointSize) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
   gl_Position = projectionMatrix * mvPosition;
-  gl_PointSize = uSize * uPixelRatio / max(0.0001, -mvPosition.z);
+  gl_PointSize = size;
 }
 `;
 

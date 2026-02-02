@@ -4,14 +4,21 @@ attribute float aId;
 uniform float uHaloSize;
 uniform float uPixelRatio;
 uniform float uHoverId;
+uniform float uMaxPointSize;
 
 varying float vVisible;
 
 void main() {
   vVisible = step(0.5, 1.0 - abs(aId - uHoverId));
   vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  float size = uHaloSize * uPixelRatio / max(0.0001, -mvPosition.z) * vVisible;
+  if (size > uMaxPointSize) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
   gl_Position = projectionMatrix * mvPosition;
-  gl_PointSize = uHaloSize * uPixelRatio / max(0.0001, -mvPosition.z) * vVisible;
+  gl_PointSize = size;
 }
 `;
 

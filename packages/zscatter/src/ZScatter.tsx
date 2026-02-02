@@ -31,6 +31,7 @@ export type ZScatterProps = {
 const DEFAULT_POINT_SIZE = 6;
 const DEFAULT_HALO_SIZE = 18;
 const PICK_SIZE_MULTIPLIER = 1.0;
+const DEFAULT_MAX_POINT_SIZE = 200;
 const BIN_COUNT = 1024;
 const CAMERA_POS_EPS = 1e-3;
 const CAMERA_ROT_EPS = 1e-4;
@@ -110,7 +111,8 @@ export function ZScatter({
         depthWrite: false,
         uniforms: {
           uSize: { value: pointSize },
-          uPixelRatio: { value: gl.getPixelRatio() }
+          uPixelRatio: { value: gl.getPixelRatio() },
+          uMaxPointSize: { value: DEFAULT_MAX_POINT_SIZE }
         }
       }),
     [gl, pointSize]
@@ -127,7 +129,8 @@ export function ZScatter({
         uniforms: {
           uHaloSize: { value: DEFAULT_HALO_SIZE },
           uPixelRatio: { value: gl.getPixelRatio() },
-          uHoverId: { value: 0 }
+          uHoverId: { value: 0 },
+          uMaxPointSize: { value: DEFAULT_MAX_POINT_SIZE }
         }
       }),
     [gl]
@@ -141,7 +144,8 @@ export function ZScatter({
         depthWrite: false,
         uniforms: {
           uSize: { value: pointSize },
-          uPixelRatio: { value: gl.getPixelRatio() }
+          uPixelRatio: { value: gl.getPixelRatio() },
+          uMaxPointSize: { value: DEFAULT_MAX_POINT_SIZE }
         }
       }),
     [gl, pointSize]
@@ -372,13 +376,16 @@ export function ZScatter({
   useFrame(() => {
     material.uniforms.uSize.value = pointSize;
     material.uniforms.uPixelRatio.value = gl.getPixelRatio();
+    material.uniforms.uMaxPointSize.value = DEFAULT_MAX_POINT_SIZE;
     pickingMaterial.uniforms.uSize.value = pointSize * PICK_SIZE_MULTIPLIER;
     pickingMaterial.uniforms.uPixelRatio.value = gl.getPixelRatio();
+    pickingMaterial.uniforms.uMaxPointSize.value = DEFAULT_MAX_POINT_SIZE;
     haloMaterial.uniforms.uPixelRatio.value = gl.getPixelRatio();
     haloMaterial.uniforms.uHaloSize.value = Math.max(
       pointSize * 1.8,
       DEFAULT_HALO_SIZE
     );
+    haloMaterial.uniforms.uMaxPointSize.value = DEFAULT_MAX_POINT_SIZE;
 
     if (countRef.current === 0) {
       return;
