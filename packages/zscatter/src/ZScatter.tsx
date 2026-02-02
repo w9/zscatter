@@ -30,6 +30,7 @@ export type ZScatterProps = {
 
 const DEFAULT_POINT_SIZE = 6;
 const DEFAULT_HALO_SIZE = 18;
+const PICK_SIZE_MULTIPLIER = 1.0;
 const BIN_COUNT = 1024;
 const CAMERA_POS_EPS = 1e-3;
 const CAMERA_ROT_EPS = 1e-4;
@@ -371,7 +372,7 @@ export function ZScatter({
   useFrame(() => {
     material.uniforms.uSize.value = pointSize;
     material.uniforms.uPixelRatio.value = gl.getPixelRatio();
-    pickingMaterial.uniforms.uSize.value = pointSize;
+    pickingMaterial.uniforms.uSize.value = pointSize * PICK_SIZE_MULTIPLIER;
     pickingMaterial.uniforms.uPixelRatio.value = gl.getPixelRatio();
     haloMaterial.uniforms.uPixelRatio.value = gl.getPixelRatio();
     haloMaterial.uniforms.uHaloSize.value = Math.max(
