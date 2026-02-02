@@ -3,6 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { pointsFragmentShader, pointsVertexShader } from "./shaders/points.glsl";
 import { pickingFragmentShader, pickingVertexShader } from "./shaders/picking.glsl";
+import { haloFragmentShader, haloVertexShader } from "./shaders/halo.glsl";
 
 export type ZScatterStaticData = {
   positions: Float32Array;
@@ -28,6 +29,7 @@ export type ZScatterProps = {
 };
 
 const DEFAULT_POINT_SIZE = 6;
+const DEFAULT_HALO_SIZE = 18;
 const BIN_COUNT = 1024;
 const CAMERA_POS_EPS = 1e-3;
 const CAMERA_ROT_EPS = 1e-4;
@@ -111,6 +113,23 @@ export function ZScatter({
         }
       }),
     [gl, pointSize]
+  );
+
+  const haloMaterial = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        vertexShader: haloVertexShader,
+        fragmentShader: haloFragmentShader,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        uniforms: {
+          uHaloSize: { value: DEFAULT_HALO_SIZE },
+          uPixelRatio: { value: gl.getPixelRatio() },
+          uHoverId: { value: 0 }
+        }
+      }),
+    [gl]
   );
 
   const pickingMaterial = useMemo(
@@ -352,6 +371,11 @@ export function ZScatter({
     material.uniforms.uPixelRatio.value = gl.getPixelRatio();
     pickingMaterial.uniforms.uSize.value = pointSize;
     pickingMaterial.uniforms.uPixelRatio.value = gl.getPixelRatio();
+    haloMaterial.uniforms.uPixelRatio.value = gl.getPixelRatio();
+    haloMaterial.uniforms.uHaloSize.value = Math.max(
+      pointSize * 1.8,
+      DEFAULT_HALO_SIZE
+    );
 
     if (countRef.current === 0) {
       return;
@@ -415,20 +439,17 @@ export function ZScatter({
   );
 
   useEffect(() => {
-    if (!onHover && !onClick) {
-      return;
-    }
     const canvas = gl.domElement;
     const handleMove = (event: PointerEvent) => {
-      if (!onHover) {
-        return;
-      }
       const id = performPick(event.clientX, event.clientY);
       if (id === lastHoverIdRef.current) {
         return;
       }
       lastHoverIdRef.current = id;
-      onHover({ id });
+      haloMaterial.uniforms.uHoverId.value = id ?? 0;
+      if (onHover) {
+        onHover({ id });
+      }
     };
     const handleClick = (event: PointerEvent) => {
       if (!onClick) {
@@ -437,13 +458,25 @@ export function ZScatter({
       const id = performPick(event.clientX, event.clientY);
       onClick({ id });
     };
+    const handleLeave = () => {
+      if (lastHoverIdRef.current === null) {
+        return;
+      }
+      lastHoverIdRef.current = null;
+      haloMaterial.uniforms.uHoverId.value = 0;
+      if (onHover) {
+        onHover({ id: null });
+      }
+    };
     canvas.addEventListener("pointermove", handleMove);
     canvas.addEventListener("pointerdown", handleClick);
+    canvas.addEventListener("pointerleave", handleLeave);
     return () => {
       canvas.removeEventListener("pointermove", handleMove);
       canvas.removeEventListener("pointerdown", handleClick);
+      canvas.removeEventListener("pointerleave", handleLeave);
     };
-  }, [gl.domElement, onClick, onHover, performPick]);
+  }, [gl.domElement, haloMaterial, onClick, onHover, performPick]);
 
   useEffect(() => {
     applyAttributes(true);
@@ -462,7 +495,19 @@ export function ZScatter({
 
   return (
     <>
-      <points ref={pointsRef} geometry={geometry} material={material} />
+      <points
+        ref={pointsRef}
+        geometry={geometry}
+        material={material}
+        renderOrder={1}
+        frustumCulled={false}
+      />
+      <points
+        geometry={geometry}
+        material={haloMaterial}
+        renderOrder={2}
+        frustumCulled={false}
+      />
       {isLoading ? loadingOverlay : null}
     </>
   );
