@@ -28,6 +28,9 @@ export type ZScatterProps = {
 };
 
 const DEFAULT_POINT_SIZE = 6;
+const BIN_COUNT = 1024;
+const CAMERA_POS_EPS = 1e-3;
+const CAMERA_ROT_EPS = 1e-4;
 
 const DEFAULT_RENDER_TARGET_PARAMS = {
   minFilter: THREE.NearestFilter,
@@ -80,6 +83,16 @@ export function ZScatter({
   const positionAttrRef = useRef<THREE.BufferAttribute | null>(null);
   const colorAttrRef = useRef<THREE.BufferAttribute | null>(null);
   const idAttrRef = useRef<THREE.BufferAttribute | null>(null);
+  const indexAttrRef = useRef<THREE.BufferAttribute | null>(null);
+
+  const binCountsRef = useRef(new Uint32Array(BIN_COUNT));
+  const binOffsetsRef = useRef(new Uint32Array(BIN_COUNT));
+  const depthBinsRef = useRef(new Uint16Array(0));
+  const sortedIndicesRef = useRef(new Uint32Array(0));
+  const needsResortRef = useRef(true);
+  const hasCameraStateRef = useRef(false);
+  const lastCameraPosRef = useRef(new THREE.Vector3());
+  const lastCameraQuatRef = useRef(new THREE.Quaternion());
 
   const [isLoading, setIsLoading] = useState(
     Boolean(onLoadChunk) && !data
@@ -154,6 +167,81 @@ export function ZScatter({
     [geometry]
   );
 
+  const ensureSortCapacity = useCallback((requiredCount: number) => {
+    if (sortedIndicesRef.current.length >= requiredCount) {
+      return;
+    }
+    const nextCapacityCount = nextCapacity(
+      sortedIndicesRef.current.length,
+      requiredCount
+    );
+    sortedIndicesRef.current = new Uint32Array(nextCapacityCount);
+    depthBinsRef.current = new Uint16Array(nextCapacityCount);
+    indexAttrRef.current = null;
+  }, []);
+
+  const rebuildDepthBins = useCallback(() => {
+    const count = countRef.current;
+    if (count === 0) {
+      return;
+    }
+    ensureSortCapacity(count);
+
+    const positions = positionsRef.current;
+    const binCounts = binCountsRef.current;
+    const binOffsets = binOffsetsRef.current;
+    const depthBins = depthBinsRef.current;
+    const sortedIndices = sortedIndicesRef.current;
+
+    binCounts.fill(0);
+
+    camera.updateMatrixWorld();
+    const m = camera.matrixWorldInverse.elements;
+    const near = camera.near;
+    const far = camera.far;
+    const invRange = 1 / Math.max(1e-6, far - near);
+    const maxBin = BIN_COUNT - 1;
+
+    for (let i = 0; i < count; i += 1) {
+      const idx = i * 3;
+      const x = positions[idx];
+      const y = positions[idx + 1];
+      const z = positions[idx + 2];
+      const viewZ = m[2] * x + m[6] * y + m[10] * z + m[14];
+      const depth = -viewZ;
+      let t = (depth - near) * invRange;
+      if (t < 0) {
+        t = 0;
+      } else if (t > 1) {
+        t = 1;
+      }
+      const bin = maxBin - Math.floor(t * maxBin);
+      depthBins[i] = bin;
+      binCounts[bin] += 1;
+    }
+
+    let running = 0;
+    for (let b = 0; b < BIN_COUNT; b += 1) {
+      binOffsets[b] = running;
+      running += binCounts[b];
+    }
+
+    for (let i = 0; i < count; i += 1) {
+      const bin = depthBins[i];
+      const writeIndex = binOffsets[bin];
+      sortedIndices[writeIndex] = i;
+      binOffsets[bin] = writeIndex + 1;
+    }
+
+    if (!indexAttrRef.current || indexAttrRef.current.array !== sortedIndices) {
+      indexAttrRef.current = new THREE.BufferAttribute(sortedIndices, 1);
+      indexAttrRef.current.setUsage(THREE.DynamicDrawUsage);
+      geometry.setIndex(indexAttrRef.current);
+    } else {
+      indexAttrRef.current.needsUpdate = true;
+    }
+  }, [camera, ensureSortCapacity, geometry]);
+
   const appendChunk = useCallback(
     (chunk: ZScatterChunk) => {
       const incomingCount = Math.floor(chunk.positions.length / 3);
@@ -195,6 +283,7 @@ export function ZScatter({
 
       countRef.current = requiredCount;
       applyAttributes(needsResize);
+      needsResortRef.current = true;
       setIsLoading(false);
     },
     [applyAttributes]
@@ -223,6 +312,7 @@ export function ZScatter({
     nextIdRef.current = countRef.current + 1;
     idsRef.current = createSequentialIds(countRef.current, 1);
     applyAttributes(true);
+    needsResortRef.current = true;
     setIsLoading(false);
   }, [applyAttributes, data]);
 
@@ -262,6 +352,31 @@ export function ZScatter({
     material.uniforms.uPixelRatio.value = gl.getPixelRatio();
     pickingMaterial.uniforms.uSize.value = pointSize;
     pickingMaterial.uniforms.uPixelRatio.value = gl.getPixelRatio();
+
+    if (countRef.current === 0) {
+      return;
+    }
+
+    if (!hasCameraStateRef.current) {
+      lastCameraPosRef.current.copy(camera.position);
+      lastCameraQuatRef.current.copy(camera.quaternion);
+      hasCameraStateRef.current = true;
+      needsResortRef.current = true;
+    } else {
+      const posDelta = lastCameraPosRef.current.distanceToSquared(camera.position);
+      const quatDot = Math.abs(lastCameraQuatRef.current.dot(camera.quaternion));
+      const rotDelta = 1 - quatDot;
+      if (posDelta > CAMERA_POS_EPS || rotDelta > CAMERA_ROT_EPS) {
+        lastCameraPosRef.current.copy(camera.position);
+        lastCameraQuatRef.current.copy(camera.quaternion);
+        needsResortRef.current = true;
+      }
+    }
+
+    if (needsResortRef.current) {
+      rebuildDepthBins();
+      needsResortRef.current = false;
+    }
   });
 
   const performPick = useCallback(
