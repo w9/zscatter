@@ -1,0 +1,9 @@
+{
+  "name": "zscatter-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@latest",
+  "workspaces": [
+    "packages/*"
+  ]
+}
