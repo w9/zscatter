@@ -1,6 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ZScatter, ZScatterChunk } from "@zscatter/zscatter";
+import React, { useCallback, useMemo, useState } from "react";
+import { ZScatterChunk, ZScatterScene } from "@zscatter/zscatter";
 
 const RECORD_SIZE_BYTES = 24;
 
@@ -62,64 +61,10 @@ async function streamBinary(appendChunk: (chunk: ZScatterChunk) => void, onCount
   }
 }
 
-function DragRotateControls() {
-  const { camera, gl } = useThree();
-  const draggingRef = useRef(false);
-  const lastPointerRef = useRef({ x: 0, y: 0 });
-  const rotationRef = useRef({ yaw: 0, pitch: 0 });
-
-  useFrame(() => {
-    const radius = camera.position.length();
-    const clampedPitch = Math.max(-1.4, Math.min(1.4, rotationRef.current.pitch));
-    const yaw = rotationRef.current.yaw;
-    const x = radius * Math.cos(clampedPitch) * Math.sin(yaw);
-    const y = radius * Math.sin(clampedPitch);
-    const z = radius * Math.cos(clampedPitch) * Math.cos(yaw);
-    camera.position.set(x, y, z);
-    camera.lookAt(0, 0, 0);
-  });
-
-  React.useEffect(() => {
-    const element = gl.domElement;
-    const handleDown = (event: PointerEvent) => {
-      draggingRef.current = true;
-      lastPointerRef.current = { x: event.clientX, y: event.clientY };
-      element.setPointerCapture(event.pointerId);
-    };
-    const handleUp = (event: PointerEvent) => {
-      draggingRef.current = false;
-      element.releasePointerCapture(event.pointerId);
-    };
-    const handleMove = (event: PointerEvent) => {
-      if (!draggingRef.current) {
-        return;
-      }
-      const deltaX = event.clientX - lastPointerRef.current.x;
-      const deltaY = event.clientY - lastPointerRef.current.y;
-      lastPointerRef.current = { x: event.clientX, y: event.clientY };
-
-      const rotationSpeed = 0.005;
-      rotationRef.current.yaw -= deltaX * rotationSpeed;
-      rotationRef.current.pitch += deltaY * rotationSpeed;
-    };
-    element.addEventListener("pointerdown", handleDown);
-    element.addEventListener("pointerup", handleUp);
-    element.addEventListener("pointerleave", handleUp);
-    element.addEventListener("pointermove", handleMove);
-    return () => {
-      element.removeEventListener("pointerdown", handleDown);
-      element.removeEventListener("pointerup", handleUp);
-      element.removeEventListener("pointerleave", handleUp);
-      element.removeEventListener("pointermove", handleMove);
-    };
-  }, [gl.domElement]);
-
-  return null;
-}
-
 export function App() {
   const [count, setCount] = useState(0);
   const [status, setStatus] = useState("Idle");
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
 
   const handleLoadChunk = useCallback((appendChunk: (chunk: ZScatterChunk) => void) => {
     setStatus("Streaming");
@@ -131,25 +76,32 @@ export function App() {
       });
   }, []);
 
+  const handleHover = useCallback((event: { id: number | null }) => {
+    setHoveredId(event.id);
+  }, []);
+
   const overlay = useMemo(
     () => (
       <div className="hud">
         <div className="hud-title">ZScatter Streaming Demo</div>
         <div>Status: {status}</div>
         <div>Points: {count.toLocaleString()}</div>
+        <div>
+          Hovered: {hoveredId === null ? "—" : hoveredId.toLocaleString()}
+        </div>
       </div>
     ),
-    [count, status]
+    [count, hoveredId, status]
   );
 
   return (
     <div className="app">
       {overlay}
-      <Canvas camera={{ position: [0, 0, 120], fov: 60 }}>
-        <DragRotateControls />
-        <ambientLight intensity={0.4} />
-        <ZScatter onLoadChunk={handleLoadChunk} pointSize={100} />
-      </Canvas>
+      <ZScatterScene
+        onLoadChunk={handleLoadChunk}
+        onHover={handleHover}
+        pointSize={100}
+      />
     </div>
   );
 }
